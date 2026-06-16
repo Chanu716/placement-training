@@ -1,57 +1,75 @@
-const products = [];
-let nextProductId = 1;
+const { ObjectId } = require("mongodb");
+const { getDB } = require("../config/db");
 
-function listProducts() {
-  return products;
+const productsCollection = () => getDB().collection("products");
+
+async function listProducts() {
+  return await productsCollection().find().toArray();
 }
 
-function getProductById(id) {
-  return products.find((product) => product.id === id);
+async function getProductById(id) {
+  if (!ObjectId.isValid(id)) {
+    return null;
+  }
+
+  return await productsCollection().findOne({ _id: new ObjectId(id) });
 }
 
-function createProduct(name, price, stock) {
+async function createProduct(name, price, stock) {
   const product = {
-    id: nextProductId++,
     name,
     price: Number(price),
     stock: Number(stock),
   };
+  const result = await productsCollection().insertOne(product);
 
-  products.push(product);
-  return product;
+  return { ...product, _id: result.insertedId };
 }
 
-function updateProduct(id, name, price, stock) {
-  const product = getProductById(id);
-  if (!product) {
+async function updateProduct(id, name, price, stock) {
+  if (!ObjectId.isValid(id)) {
     return null;
   }
 
+  const updates = {};
+
   if (name !== undefined) {
-    product.name = name;
-  }
-  if (price !== undefined) {
-    product.price = Number(price);
-  }
-  if (stock !== undefined) {
-    product.stock = Number(stock);
+    updates.name = name;
   }
 
-  return product;
+  if (price !== undefined) {
+    updates.price = Number(price);
+  }
+
+  if (stock !== undefined) {
+    updates.stock = Number(stock);
+  }
+
+  const result = await productsCollection().updateOne(
+    { _id: new ObjectId(id) },
+    { $set: updates },
+  );
+
+  if (result.matchedCount === 0) {
+    return null;
+  }
+
+  return await getProductById(id);
 }
 
-function deleteProduct(id) {
-  const index = products.findIndex((product) => product.id === id);
-  if (index === -1) {
+async function deleteProduct(id) {
+  if (!ObjectId.isValid(id)) {
     return false;
   }
 
-  products.splice(index, 1);
-  return true;  
+  const result = await productsCollection().deleteOne({
+    _id: new ObjectId(id),
+  });
+
+  return result.deletedCount > 0;
 }
 
 module.exports = {
-  products,
   listProducts,
   getProductById,
   createProduct,

@@ -1,20 +1,25 @@
-const orders = [];
-let nextOrderId = 1;
-
+const { ObjectId } = require("mongodb");
+const { getDB } = require("../config/db");
 const { getUserById } = require("./userModel");
 const { getProductById } = require("./productModel");
 
-function listOrders() {
-  return orders;
+const ordersCollection = () => getDB().collection("orders");
+
+async function listOrders() {
+  return await ordersCollection().find().toArray();
 }
 
-function getOrderById(id) {
-  return orders.find((order) => order.id === id);
+async function getOrderById(id) {
+  if (!ObjectId.isValid(id)) {
+    return null;
+  }
+
+  return await ordersCollection().findOne({ _id: new ObjectId(id) });
 }
 
-function createOrder(userId, productId, quantity) {
-  const user = getUserById(userId);
-  const product = getProductById(productId);
+async function createOrder(userId, productId, quantity) {
+  const user = await getUserById(userId);
+  const product = await getProductById(productId);
 
   if (!user) {
     return { error: "User not found" };
@@ -32,28 +37,29 @@ function createOrder(userId, productId, quantity) {
     return { error: "Not enough stock" };
   }
 
-  product.stock = product.stock - quantity;
+  await getDB()
+    .collection("products")
+    .updateOne({ _id: product._id }, { $inc: { stock: -quantity } });
 
   const order = {
-    id: nextOrderId++,
     userId,
     productId,
     quantity,
     totalPrice: product.price * quantity,
   };
 
-  orders.push(order);
-  return { order };
+  const result = await ordersCollection().insertOne(order);
+  return { order: { ...order, _id: result.insertedId } };
 }
 
-function updateOrder(id, quantity) {
-  const order = getOrderById(id);
+async function updateOrder(id, quantity) {
+  const order = await getOrderById(id);
 
   if (!order) {
     return { error: "Order not found" };
   }
 
-  const product = getProductById(order.productId);
+  const product = await getProductById(order.productId);
 
   if (!product) {
     return { error: "Product not found" };
@@ -69,33 +75,52 @@ function updateOrder(id, quantity) {
     return { error: "Not enough stock" };
   }
 
-  product.stock = currentStock - quantity;
-  order.quantity = quantity;
-  order.totalPrice = product.price * quantity;
+  await getDB()
+    .collection("products")
+    .updateOne(
+      { _id: product._id },
+      { $set: { stock: currentStock - quantity } },
+    );
 
-  return { order };
+  await ordersCollection().updateOne(
+    { _id: order._id },
+    {
+      $set: {
+        quantity,
+        totalPrice: product.price * quantity,
+      },
+    },
+  );
+
+  return {
+    order: {
+      ...order,
+      quantity,
+      totalPrice: product.price * quantity,
+    },
+  };
 }
 
-function deleteOrder(id) {
-  const index = orders.findIndex((order) => order.id === id);
+async function deleteOrder(id) {
+  const order = await getOrderById(id);
 
-  if (index === -1) {
+  if (!order) {
     return false;
   }
 
-  const order = orders[index];
-  const product = getProductById(order.productId);
+  const product = await getProductById(order.productId);
 
   if (product) {
-    product.stock = product.stock + order.quantity;
+    await getDB()
+      .collection("products")
+      .updateOne({ _id: product._id }, { $inc: { stock: order.quantity } });
   }
 
-  orders.splice(index, 1);
-  return true;
+  const result = await ordersCollection().deleteOne({ _id: order._id });
+  return result.deletedCount > 0;
 }
 
 module.exports = {
-  orders,
   listOrders,
   getOrderById,
   createOrder,

@@ -1,53 +1,67 @@
-const users = [];
-let nextUserId = 1;
+const { ObjectId } = require("mongodb");
+const { getDB } = require("../config/db");
 
-function listUsers() {
-  return users;
+const usersCollection = () => getDB().collection("users");
+
+async function listUsers() {
+  return await usersCollection().find().toArray();
 }
 
-function getUserById(id) {
-  return users.find((user) => user.id === id);
-}
-
-function createUser(name, email) {
-  const user = {
-    id: nextUserId++,
-    name,
-    email,
-  };
-
-  users.push(user);
-  return user;
-}
-
-function updateUser(id, name, email) {
-  const user = getUserById(id);
-  if (!user) {
+async function getUserById(id) {
+  if (!ObjectId.isValid(id)) {
     return null;
   }
 
-  if (name !== undefined) {
-    user.name = name;
-  }
-  if (email !== undefined) {
-    user.email = email;
-  }
-
-  return user;
+  return await usersCollection().findOne({ _id: new ObjectId(id) });
 }
 
-function deleteUser(id) {
-  const index = users.findIndex((user) => user.id === id);
-  if (index === -1) {
+async function createUser(name, email) {
+  const user = { name, email };
+  const result = await usersCollection().insertOne(user);
+
+  return { ...user, _id: result.insertedId };
+}
+
+async function updateUser(id, name, email) {
+  if (!ObjectId.isValid(id)) {
+    return null;
+  }
+
+  const updates = {};
+
+  if (name !== undefined) {
+    updates.name = name;
+  }
+
+  if (email !== undefined) {
+    updates.email = email;
+  }
+
+  const result = await usersCollection().updateOne(
+    { _id: new ObjectId(id) },
+    { $set: updates },
+  );
+
+  if (result.matchedCount === 0) {
+    return null;
+  }
+
+  return await getUserById(id);
+}
+
+async function deleteUser(id) {
+  if (!ObjectId.isValid(id)) {
     return false;
   }
 
-  users.splice(index, 1);
-  return true;
+  const result = await usersCollection().deleteOne({
+    _id: new ObjectId(id),
+  });
+
+  return result.deletedCount > 0;
 }
 
 module.exports = {
-  users,
   listUsers,
   getUserById,
   createUser,

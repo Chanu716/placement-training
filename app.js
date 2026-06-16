@@ -1,5 +1,8 @@
+require("dotenv").config();
+
 const express = require("express");
 const path = require("path");
+const { connectDB } = require("./config/db");
 const {
   listUsers,
   getUserById,
@@ -23,7 +26,7 @@ const {
 } = require("./models/orderModel");
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use((req, res, next) => {
@@ -43,13 +46,13 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-app.get("/users", (req, res) => {
-  res.json(listUsers());
+app.get("/users", async (req, res) => {
+  const users = await listUsers();
+  res.json(users);
 });
 
-app.get("/users/:id", (req, res) => {
-  const userId = Number(req.params.id);
-  const user = getUserById(userId);
+app.get("/users/:id", async (req, res) => {
+  const user = await getUserById(req.params.id);
 
   if (!user) {
     return res.status(404).json({ message: "User not found" });
@@ -58,20 +61,19 @@ app.get("/users/:id", (req, res) => {
   res.json(user);
 });
 
-app.post("/users", (req, res) => {
+app.post("/users", async (req, res) => {
   const { name, email } = req.body;
 
   if (!name || !email) {
     return res.status(400).json({ message: "name and email are required" });
   }
 
-  const user = createUser(name, email);
+  const user = await createUser(name, email);
   res.status(201).json(user);
 });
 
-app.put("/users/:id", (req, res) => {
-  const userId = Number(req.params.id);
-  const user = updateUser(userId, req.body.name, req.body.email);
+app.put("/users/:id", async (req, res) => {
+  const user = await updateUser(req.params.id, req.body.name, req.body.email);
 
   if (!user) {
     return res.status(404).json({ message: "User not found" });
@@ -80,8 +82,8 @@ app.put("/users/:id", (req, res) => {
   res.json(user);
 });
 
-app.delete("/users/:id", (req, res) => {
-  const deleted = deleteUser(Number(req.params.id));
+app.delete("/users/:id", async (req, res) => {
+  const deleted = await deleteUser(req.params.id);
 
   if (!deleted) {
     return res.status(404).json({ message: "User not found" });
@@ -90,13 +92,13 @@ app.delete("/users/:id", (req, res) => {
   res.status(204).send();
 });
 
-app.get("/products", (req, res) => {
-  res.json(listProducts());
+app.get("/products", async (req, res) => {
+  const products = await listProducts();
+  res.json(products);
 });
 
-app.get("/products/:id", (req, res) => {
-  const productId = Number(req.params.id);
-  const product = getProductById(productId);
+app.get("/products/:id", async (req, res) => {
+  const product = await getProductById(req.params.id);
 
   if (!product) {
     return res.status(404).json({ message: "Product not found" });
@@ -105,7 +107,7 @@ app.get("/products/:id", (req, res) => {
   res.json(product);
 });
 
-app.post("/products", (req, res) => {
+app.post("/products", async (req, res) => {
   const { name, price, stock } = req.body;
 
   if (!name || price === undefined || stock === undefined) {
@@ -114,14 +116,13 @@ app.post("/products", (req, res) => {
       .json({ message: "name, price, and stock are required" });
   }
 
-  const product = createProduct(name, price, stock);
+  const product = await createProduct(name, price, stock);
   res.status(201).json(product);
 });
 
-app.put("/products/:id", (req, res) => {
-  const productId = Number(req.params.id);
-  const product = updateProduct(
-    productId,
+app.put("/products/:id", async (req, res) => {
+  const product = await updateProduct(
+    req.params.id,
     req.body.name,
     req.body.price,
     req.body.stock,
@@ -134,8 +135,8 @@ app.put("/products/:id", (req, res) => {
   res.json(product);
 });
 
-app.delete("/products/:id", (req, res) => {
-  const deleted = deleteProduct(Number(req.params.id));
+app.delete("/products/:id", async (req, res) => {
+  const deleted = await deleteProduct(req.params.id);
 
   if (!deleted) {
     return res.status(404).json({ message: "Product not found" });
@@ -144,13 +145,13 @@ app.delete("/products/:id", (req, res) => {
   res.status(204).send();
 });
 
-app.get("/orders", (req, res) => {
-  res.json(listOrders());
+app.get("/orders", async (req, res) => {
+  const orders = await listOrders();
+  res.json(orders);
 });
 
-app.get("/orders/:id", (req, res) => {
-  const orderId = Number(req.params.id);
-  const order = getOrderById(orderId);
+app.get("/orders/:id", async (req, res) => {
+  const order = await getOrderById(req.params.id);
 
   if (!order) {
     return res.status(404).json({ message: "Order not found" });
@@ -159,11 +160,12 @@ app.get("/orders/:id", (req, res) => {
   res.json(order);
 });
 
-app.post("/orders", (req, res) => {
-  const userId = Number(req.body.userId);
-  const productId = Number(req.body.productId);
-  const quantity = Number(req.body.quantity || 1);
-  const result = createOrder(userId, productId, quantity);
+app.post("/orders", async (req, res) => {
+  const result = await createOrder(
+    req.body.userId,
+    req.body.productId,
+    Number(req.body.quantity || 1),
+  );
 
   if (result.error) {
     if (
@@ -179,10 +181,9 @@ app.post("/orders", (req, res) => {
   res.status(201).json(result.order);
 });
 
-app.put("/orders/:id", (req, res) => {
-  const orderId = Number(req.params.id);
+app.put("/orders/:id", async (req, res) => {
   const quantity = Number(req.body.quantity);
-  const result = updateOrder(orderId, quantity);
+  const result = await updateOrder(req.params.id, quantity);
 
   if (result.error) {
     if (
@@ -198,8 +199,8 @@ app.put("/orders/:id", (req, res) => {
   res.json(result.order);
 });
 
-app.delete("/orders/:id", (req, res) => {
-  const deleted = deleteOrder(Number(req.params.id));
+app.delete("/orders/:id", async (req, res) => {
+  const deleted = await deleteOrder(req.params.id);
 
   if (!deleted) {
     return res.status(404).json({ message: "Order not found" });
@@ -208,6 +209,19 @@ app.delete("/orders/:id", (req, res) => {
   res.status(204).send();
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
-});
+const startServer = async () => {
+  await connectDB();
+
+  app.listen(port, () => {
+    console.log(`Server is running on http://localhost:${port}`);
+  });
+};
+
+if (require.main === module) {
+  startServer().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+module.exports = app;
